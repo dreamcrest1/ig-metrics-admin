@@ -830,16 +830,16 @@ HTML_TEMPLATE = """
                 </div>
 
                 <div class="form-group">
-                    <label for="sel-duration">Access Duration</label>
-                    <select id="sel-duration" class="input-control">
-                        <option value="1">1 Day Trial</option>
-                        <option value="7">7 Days Standard</option>
-                        <option value="20">20 Days Operations</option>
-                        <option value="30" selected>30 Days Pro</option>
-                        <option value="90">90 Days Enterprise</option>
-                        <option value="365">1 Year (365 Days)</option>
-                        <option value="27000">Lifetime (Dec 31, 2099)</option>
-                    </select>
+                    <label for="txt-duration">License Duration (Days)</label>
+                    <input type="number" id="txt-duration" class="input-control" value="30" min="1" max="36500" placeholder="Enter number of days...">
+                    <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
+                        <button type="button" class="btn-copy" style="background: rgba(255,255,255,0.05); padding: 6px 10px;" onclick="setDurationPreset(1)">1d</button>
+                        <button type="button" class="btn-copy" style="background: rgba(255,255,255,0.05); padding: 6px 10px;" onclick="setDurationPreset(7)">7d</button>
+                        <button type="button" class="btn-copy" style="background: rgba(255,255,255,0.05); padding: 6px 10px;" onclick="setDurationPreset(30)">30d</button>
+                        <button type="button" class="btn-copy" style="background: rgba(255,255,255,0.05); padding: 6px 10px;" onclick="setDurationPreset(90)">90d</button>
+                        <button type="button" class="btn-copy" style="background: rgba(255,255,255,0.05); padding: 6px 10px;" onclick="setDurationPreset(365)">1 Year</button>
+                        <button type="button" class="btn-copy" style="background: rgba(255,255,255,0.05); padding: 6px 10px;" onclick="setDurationPreset(27000)">Lifetime</button>
+                    </div>
                 </div>
 
                 <button class="btn-action" onclick="generateKey()">
@@ -951,16 +951,21 @@ HTML_TEMPLATE = """
             }
         }
 
+        function setDurationPreset(days) {
+            document.getElementById('txt-duration').value = days;
+        }
+
         async function generateKey() {
             const nameInput = document.getElementById('txt-client-name');
             const name = nameInput.value.trim() || "Operations Client";
-            const days = parseInt(document.getElementById('sel-duration').value);
+            const daysInput = document.getElementById('txt-duration');
+            const days = parseInt(daysInput.value) || 30;
             
             const res = await fetchAPI('/api/generate_key', { name: name, days: days }, 'POST');
             if (res.status === 'ok') {
                 document.getElementById('new-key-box').style.display = 'block';
                 document.getElementById('new-key-text').innerText = res.key;
-                nameInput.value = ''; // clear input
+                nameInput.value = ''; // clear name input
                 showToast("New license key generated and saved!");
                 loadClients();
             } else {
