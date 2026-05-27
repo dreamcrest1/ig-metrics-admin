@@ -146,14 +146,14 @@ HTML_TEMPLATE = """
     <style>
         :root {
             --bg-base: #060609;
-            --bg-surface: rgba(13, 13, 21, 0.7);
+            --bg-surface: rgba(10, 10, 16, 0.65);
             --bg-card: rgba(22, 22, 34, 0.45);
-            --border-glow: rgba(99, 102, 241, 0.15);
-            --border-light: rgba(255, 255, 255, 0.05);
+            --border-glow: rgba(99, 102, 241, 0.25);
+            --border-light: rgba(255, 255, 255, 0.06);
             
             --primary: #6366f1;
-            --primary-glow: rgba(99, 102, 241, 0.45);
-            --primary-gradient: linear-gradient(135deg, #6366f1, #4f46e5);
+            --primary-glow: rgba(99, 102, 241, 0.4);
+            --primary-gradient: linear-gradient(135deg, #6366f1, #7c3aed, #d946ef);
             
             --emerald: #10b981;
             --emerald-glow: rgba(16, 185, 129, 0.3);
@@ -172,23 +172,46 @@ HTML_TEMPLATE = """
             padding: 0;
         }
 
+        /* CUSTOM SCROLLBARS */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(99, 102, 241, 0.25);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(99, 102, 241, 0.5);
+        }
+
         body {
             font-family: 'Outfit', sans-serif;
             background-color: var(--bg-base);
             background-image: 
-                radial-gradient(at 10% 20%, rgba(99, 102, 241, 0.08) 0px, transparent 50%),
-                radial-gradient(at 90% 80%, rgba(16, 185, 129, 0.05) 0px, transparent 50%);
+                radial-gradient(at 8% 12%, rgba(99, 102, 241, 0.1) 0px, transparent 45%),
+                radial-gradient(at 92% 88%, rgba(217, 70, 239, 0.06) 0px, transparent 45%);
             color: var(--text-main);
             min-height: 100vh;
             padding: 40px 20px;
             display: flex;
             flex-direction: column;
             align-items: center;
+            overflow-x: hidden;
         }
 
         .dashboard-wrapper {
             width: 100%;
             max-width: 1300px;
+            animation: fadeInPage 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes fadeInPage {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         /* HEADER SECTION */
@@ -197,20 +220,22 @@ HTML_TEMPLATE = """
             justify-content: space-between;
             align-items: center;
             margin-bottom: 35px;
-            padding-bottom: 20px;
+            padding-bottom: 24px;
             border-bottom: 1px solid var(--border-light);
         }
 
         .header-brand {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 14px;
         }
 
         .brand-icon {
             background: var(--primary-gradient);
-            width: 44px;
-            height: 44px;
+            background-size: 200% 200%;
+            animation: gradientAnim 6s ease infinite;
+            width: 46px;
+            height: 46px;
             border-radius: 12px;
             display: flex;
             align-items: center;
@@ -221,24 +246,31 @@ HTML_TEMPLATE = """
         }
 
         .brand-text h1 {
-            font-size: 22px;
+            font-size: 24px;
             font-weight: 800;
             letter-spacing: 0.5px;
-            background: linear-gradient(to right, #ffffff, #a5b4fc);
+            background: linear-gradient(to right, #ffffff, #c7d2fe, #f472b6);
+            background-size: 200% auto;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            animation: shineText 5s linear infinite;
+        }
+
+        @keyframes shineText {
+            to { background-position: 200% center; }
         }
 
         .brand-text p {
-            font-size: 12px;
+            font-size: 11px;
             color: var(--text-muted);
-            font-weight: 500;
+            font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 1.5px;
+            letter-spacing: 2px;
+            margin-top: 2px;
         }
 
         .server-status-badge {
-            background: rgba(16, 185, 129, 0.1);
+            background: rgba(16, 185, 129, 0.08);
             border: 1px solid rgba(16, 185, 129, 0.2);
             padding: 8px 16px;
             border-radius: 30px;
@@ -247,6 +279,8 @@ HTML_TEMPLATE = """
             gap: 8px;
             font-size: 13px;
             font-weight: 600;
+            color: #34d399;
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.05);
         }
 
         .status-dot {
@@ -259,7 +293,7 @@ HTML_TEMPLATE = """
         }
 
         @keyframes pulse-green {
-            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
             70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
             100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
         }
@@ -269,64 +303,68 @@ HTML_TEMPLATE = """
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
             gap: 20px;
-            margin-bottom: 30px;
+            margin-bottom: 35px;
         }
 
         .metric-card {
-            background: var(--bg-surface);
+            background: linear-gradient(135deg, rgba(22, 22, 34, 0.4), rgba(13, 13, 21, 0.65));
             border: 1px solid var(--border-light);
-            border-radius: 16px;
-            padding: 22px;
-            backdrop-filter: blur(16px);
+            border-radius: 18px;
+            padding: 24px;
+            backdrop-filter: blur(20px) saturate(180%);
             display: flex;
             align-items: center;
             justify-content: space-between;
-            transition: all 0.3s ease;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
         }
 
         .metric-card:hover {
             border-color: var(--border-glow);
-            transform: translateY(-2px);
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 15px 35px rgba(99, 102, 241, 0.15);
         }
 
         .metric-info h3 {
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 600;
             color: var(--text-muted);
             text-transform: uppercase;
-            letter-spacing: 0.8px;
-            margin-bottom: 6px;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
         }
 
         .metric-value {
-            font-size: 28px;
+            font-size: 32px;
             font-weight: 800;
             color: #ffffff;
+            letter-spacing: -0.5px;
         }
 
         .metric-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 12px;
+            width: 52px;
+            height: 52px;
+            border-radius: 14px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 22px;
+            font-size: 24px;
+            box-shadow: inset 0 0 12px rgba(255, 255, 255, 0.05);
         }
 
-        .m-keys { background: rgba(99, 102, 241, 0.1); color: var(--primary); }
-        .m-active { background: rgba(16, 185, 129, 0.1); color: var(--emerald); }
-        .m-disabled { background: rgba(239, 68, 68, 0.1); color: var(--rose); }
-        .m-online { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+        .m-keys { background: rgba(99, 102, 241, 0.08); color: var(--primary); border: 1px solid rgba(99, 102, 241, 0.15); }
+        .m-active { background: rgba(16, 185, 129, 0.08); color: var(--emerald); border: 1px solid rgba(16, 185, 129, 0.15); }
+        .m-disabled { background: rgba(239, 68, 68, 0.08); color: var(--rose); border: 1px solid rgba(239, 68, 68, 0.15); }
+        .m-online { background: rgba(245, 158, 11, 0.08); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.15); }
 
         /* CONTENT WORKSPACE GRID */
         .workspace-grid {
             display: grid;
-            grid-template-columns: 360px 1fr;
+            grid-template-columns: 380px 1fr;
             gap: 30px;
         }
 
-        @media (max-width: 1000px) {
+        @media (max-width: 1080px) {
             .workspace-grid {
                 grid-template-columns: 1fr;
             }
@@ -335,93 +373,96 @@ HTML_TEMPLATE = """
         .panel-glass {
             background: var(--bg-surface);
             border: 1px solid var(--border-light);
-            border-radius: 18px;
-            backdrop-filter: blur(16px);
+            border-radius: 20px;
+            backdrop-filter: blur(20px) saturate(180%);
             padding: 30px;
-            box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.6);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+            transition: border-color 0.3s;
+        }
+
+        .panel-glass:focus-within {
+            border-color: rgba(99, 102, 241, 0.2);
         }
 
         .panel-glass h2 {
-            font-size: 18px;
+            font-size: 19px;
             font-weight: 700;
             color: #ffffff;
-            margin-bottom: 22px;
+            margin-bottom: 24px;
             display: flex;
             align-items: center;
-            gap: 10px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            padding-bottom: 12px;
+            gap: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            padding-bottom: 14px;
         }
 
         /* FORM ELEMENTS */
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 24px;
         }
 
         .form-group label {
             display: block;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 600;
             color: var(--text-muted);
-            margin-bottom: 8px;
+            margin-bottom: 10px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 1px;
         }
 
         .input-control {
             width: 100%;
-            background: rgba(0, 0, 0, 0.35);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 10px;
-            padding: 12px 14px;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            border-radius: 12px;
+            padding: 14px 16px;
             color: #ffffff;
             font-family: inherit;
             font-size: 14px;
             outline: none;
-            transition: all 0.2s ease;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .input-control:focus {
             border-color: var(--primary);
-            box-shadow: 0 0 10px rgba(99, 102, 241, 0.15);
-            background: rgba(0, 0, 0, 0.5);
-        }
-
-        select.input-control {
-            cursor: pointer;
-            appearance: none;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23f3f4f6'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: right 14px center;
-            background-size: 16px;
-            padding-right: 40px;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+            background: rgba(0, 0, 0, 0.55);
         }
 
         .btn-action {
             width: 100%;
             background: var(--primary-gradient);
+            background-size: 200% 200%;
+            animation: gradientAnim 8s ease infinite;
             border: none;
-            border-radius: 10px;
-            padding: 14px 20px;
+            border-radius: 12px;
+            padding: 15px 24px;
             color: #ffffff;
             font-family: inherit;
-            font-size: 13px;
+            font-size: 14px;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 1.5px;
             cursor: pointer;
-            transition: all 0.25s ease;
-            box-shadow: 0 4px 20px var(--primary-glow);
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 6px 20px rgba(139, 92, 246, 0.35);
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 10px;
         }
 
+        @keyframes gradientAnim {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
         .btn-action:hover {
-            transform: translateY(-1px);
-            filter: brightness(1.1);
-            box-shadow: 0 6px 24px rgba(99, 102, 241, 0.6);
+            transform: translateY(-2px);
+            filter: brightness(1.15);
+            box-shadow: 0 10px 25px rgba(139, 92, 246, 0.55);
         }
 
         .btn-action:active {
@@ -430,17 +471,17 @@ HTML_TEMPLATE = """
 
         /* KEY RESULTS BOX */
         .key-reveal-box {
-            display: none;
             margin-top: 24px;
-            background: rgba(16, 185, 129, 0.05);
-            border: 1px solid rgba(16, 185, 129, 0.2);
-            border-radius: 12px;
-            padding: 16px;
-            animation: fadeIn 0.4s ease forwards;
+            background: rgba(99, 102, 241, 0.05);
+            border: 1px solid rgba(99, 102, 241, 0.25);
+            border-radius: 14px;
+            padding: 20px;
+            animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(5px); }
+            from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
@@ -448,44 +489,37 @@ HTML_TEMPLATE = """
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 8px;
+            margin-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 8px;
         }
 
         .reveal-title {
-            color: var(--emerald);
+            color: #a5b4fc;
             font-size: 12px;
             font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-copy {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 6px 12px;
+            cursor: pointer;
+            transition: all 0.2s;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
 
-        .btn-copy {
-            background: rgba(255, 255, 255, 0.08);
-            border: none;
-            border-radius: 6px;
-            color: #ffffff;
-            font-size: 11px;
-            font-weight: 700;
-            padding: 4px 8px;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-transform: uppercase;
-        }
-
         .btn-copy:hover {
-            background: var(--emerald);
-        }
-
-        .reveal-key-code {
-            font-family: 'JetBrains Mono', monospace;
-            background: rgba(0, 0, 0, 0.4);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            padding: 12px;
-            border-radius: 8px;
-            font-size: 13px;
-            color: #ffffff;
-            word-break: break-all;
-            user-select: all;
+            background: var(--primary);
+            border-color: transparent;
+            box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
         }
 
         /* CLIENT LIST CONTROLS */
@@ -495,7 +529,7 @@ HTML_TEMPLATE = """
             justify-content: space-between;
             align-items: center;
             gap: 15px;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
         }
 
         @media (max-width: 600px) {
@@ -514,27 +548,28 @@ HTML_TEMPLATE = """
             width: 100%;
             background: rgba(0, 0, 0, 0.3);
             border: 1px solid rgba(255, 255, 255, 0.06);
-            padding: 11px 16px;
-            padding-left: 40px;
-            border-radius: 10px;
+            padding: 13px 16px;
+            padding-left: 44px;
+            border-radius: 12px;
             color: #ffffff;
-            font-size: 13.5px;
+            font-size: 14px;
             outline: none;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .search-input:focus {
             border-color: var(--primary);
             background: rgba(0, 0, 0, 0.45);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
         }
 
         .search-icon {
             position: absolute;
-            left: 14px;
+            left: 16px;
             top: 50%;
             transform: translateY(-50%);
             color: var(--text-dark);
-            font-size: 15px;
+            font-size: 16px;
             pointer-events: none;
         }
 
@@ -542,22 +577,22 @@ HTML_TEMPLATE = """
             display: flex;
             background: rgba(0, 0, 0, 0.35);
             border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 10px;
-            padding: 4px;
+            border-radius: 12px;
+            padding: 5px;
             gap: 4px;
         }
 
         .filter-btn {
             background: transparent;
             border: none;
-            padding: 7px 14px;
+            padding: 8px 16px;
             color: var(--text-muted);
             font-family: inherit;
             font-size: 12px;
             font-weight: 600;
-            border-radius: 7px;
+            border-radius: 8px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .filter-btn.active {
@@ -568,59 +603,65 @@ HTML_TEMPLATE = """
 
         .filter-btn:hover:not(.active) {
             color: #ffffff;
-            background: rgba(255, 255, 255, 0.03);
+            background: rgba(255, 255, 255, 0.04);
         }
 
         /* DATA TABLE STYLE */
         .table-responsive {
             width: 100%;
             overflow-x: auto;
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            background: rgba(0, 0, 0, 0.15);
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            background: rgba(0, 0, 0, 0.2);
+            box-shadow: inset 0 4px 20px rgba(0, 0, 0, 0.3);
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 13.5px;
+            font-size: 14px;
             text-align: left;
         }
 
         th {
-            background: rgba(18, 18, 29, 0.6);
+            background: rgba(14, 14, 24, 0.7);
             color: var(--text-muted);
             font-weight: 600;
             font-size: 11px;
             text-transform: uppercase;
-            letter-spacing: 1px;
-            padding: 14px 18px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            letter-spacing: 1.5px;
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
         }
 
         td {
-            padding: 16px 18px;
+            padding: 18px 20px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.03);
             color: var(--text-main);
             vertical-align: middle;
         }
 
+        tr {
+            transition: background-color 0.2s;
+        }
+
         tr:hover td {
-            background: rgba(255, 255, 255, 0.015);
+            background: rgba(255, 255, 255, 0.02);
         }
 
         .client-name-cell {
             font-weight: 600;
             color: #ffffff;
+            font-size: 14.5px;
         }
 
         .client-key-code {
             font-family: 'JetBrains Mono', monospace;
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            padding: 4px 8px;
-            border-radius: 5px;
-            font-size: 11px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12px;
             color: #d1d5db;
             display: inline-flex;
             align-items: center;
@@ -632,7 +673,7 @@ HTML_TEMPLATE = """
             border: none;
             color: var(--text-muted);
             cursor: pointer;
-            font-size: 11px;
+            font-size: 12px;
             transition: color 0.1s;
         }
 
@@ -643,13 +684,13 @@ HTML_TEMPLATE = """
         .badge-status {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
-            padding: 4px 10px;
+            gap: 8px;
+            padding: 6px 12px;
             border-radius: 20px;
             font-size: 11px;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.8px;
         }
 
         .status-dot-mini {
@@ -659,9 +700,10 @@ HTML_TEMPLATE = """
         }
 
         .bg-active {
-            background: rgba(16, 185, 129, 0.08);
-            border: 1px solid rgba(16, 185, 129, 0.2);
-            color: var(--emerald);
+            background: rgba(16, 185, 129, 0.07);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            color: #34d399;
+            box-shadow: 0 0 12px rgba(16, 185, 129, 0.1);
         }
         .bg-active .status-dot-mini {
             background: var(--emerald);
@@ -669,9 +711,9 @@ HTML_TEMPLATE = """
         }
 
         .bg-disabled {
-            background: rgba(239, 68, 68, 0.08);
-            border: 1px solid rgba(239, 68, 68, 0.2);
-            color: var(--rose);
+            background: rgba(239, 68, 68, 0.07);
+            border: 1px solid rgba(239, 68, 68, 0.25);
+            color: #f87171;
         }
         .bg-disabled .status-dot-mini {
             background: var(--rose);
@@ -679,6 +721,7 @@ HTML_TEMPLATE = """
 
         .expiry-cell {
             font-weight: 500;
+            color: #e5e7eb;
         }
 
         .ip-cell {
@@ -701,17 +744,18 @@ HTML_TEMPLATE = """
         }
 
         .btn-action-sm {
-            padding: 6px 12px;
+            padding: 8px 14px;
             font-size: 11px;
             font-weight: 700;
-            border-radius: 6px;
+            border-radius: 8px;
             border: none;
             cursor: pointer;
             text-transform: uppercase;
             display: inline-flex;
             align-items: center;
-            gap: 5px;
-            transition: all 0.2s;
+            gap: 6px;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            letter-spacing: 0.5px;
         }
 
         .btn-sm-toggle-off {
@@ -722,7 +766,7 @@ HTML_TEMPLATE = """
         .btn-sm-toggle-off:hover {
             background: var(--rose);
             color: #ffffff;
-            box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+            box-shadow: 0 0 12px rgba(239, 68, 68, 0.35);
         }
 
         .btn-sm-toggle-on {
@@ -733,7 +777,7 @@ HTML_TEMPLATE = """
         .btn-sm-toggle-on:hover {
             background: var(--emerald);
             color: #ffffff;
-            box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+            box-shadow: 0 0 12px rgba(16, 185, 129, 0.35);
         }
 
         .btn-sm-delete {
@@ -745,12 +789,13 @@ HTML_TEMPLATE = """
             background: rgba(239, 68, 68, 0.2);
             color: #ffffff;
             border-color: rgba(239, 68, 68, 0.3);
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.2);
         }
 
         .empty-row-state {
             text-align: center;
             color: var(--text-dark);
-            padding: 50px 20px;
+            padding: 60px 20px;
             font-style: italic;
         }
 
@@ -767,19 +812,20 @@ HTML_TEMPLATE = """
 
         .toast-alert {
             background: rgba(13, 13, 21, 0.95);
-            border: 1px solid var(--emerald);
-            border-left: 4px solid var(--emerald);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-left: 4px solid var(--primary);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
             color: #ffffff;
             padding: 14px 20px;
-            border-radius: 8px;
+            border-radius: 10px;
             font-size: 13.5px;
             font-weight: 500;
             display: flex;
             align-items: center;
             gap: 10px;
             min-width: 280px;
-            animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            backdrop-filter: blur(10px);
+            animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
 
         @keyframes slideIn {
@@ -860,18 +906,15 @@ HTML_TEMPLATE = """
                 </div>
 
                 <div class="form-group">
-                    <label for="sel-tool">Target Application</label>
-                    <select id="sel-tool" class="input-control" onchange="toggleCustomToolInput()">
-                        <option value="ig-master-suite">IG Master Suite</option>
-                        <option value="whatsapp-bulk-sender">Dreamcrest WhatsApp Sender</option>
-                        <option value="all">All Access (Universal Key)</option>
-                        <option value="custom">Custom Tool...</option>
-                    </select>
+                    <label>Target Application</label>
+                    <div style="background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.25); color: #a5b4fc; padding: 12px 14px; border-radius: 10px; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                        <span>🛡️</span> All Access (Universal Key)
+                    </div>
                 </div>
-                
-                <div class="form-group" id="custom-tool-group" style="display: none;">
-                    <label for="txt-custom-tool">Custom Tool Identifier</label>
-                    <input type="text" id="txt-custom-tool" class="input-control" placeholder="e.g. facebook-extractor" autocomplete="off">
+
+                <div class="form-group">
+                    <label for="txt-batch-count">Batch Count (Keys to Generate)</label>
+                    <input type="number" id="txt-batch-count" class="input-control" value="1" min="1" max="100" placeholder="Number of keys...">
                 </div>
 
                 <div class="form-group">
@@ -891,13 +934,18 @@ HTML_TEMPLATE = """
                     <span>Register & Generate Key</span>
                 </button>
 
-                <!-- DISPLAY DYNAMIC REVEAL OF GENERATED KEY -->
-                <div id="new-key-box" class="key-reveal-box">
+                <!-- DISPLAY DYNAMIC REVEAL OF GENERATED KEYS -->
+                <div id="new-key-box" class="key-reveal-box" style="display: none;">
                     <div class="reveal-header">
-                        <span class="reveal-title">License Registered</span>
-                        <button class="btn-copy" onclick="copyToClipboard('new-key-text')">Copy Key</button>
+                        <span class="reveal-title" id="reveal-title-text">Licenses Registered</span>
+                        <div style="display: flex; gap: 6px;">
+                            <button class="btn-copy" onclick="copyAllKeys()">Copy All</button>
+                            <button class="btn-copy" style="background: var(--primary);" onclick="downloadKeysTxt()">Download TXT</button>
+                        </div>
                     </div>
-                    <code id="new-key-text" class="reveal-key-code"></code>
+                    <div id="new-keys-container" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; margin-top: 10px;">
+                        <!-- Keys will be dynamically inserted here -->
+                    </div>
                 </div>
             </section>
 
@@ -1017,31 +1065,74 @@ HTML_TEMPLATE = """
             document.getElementById('txt-duration').value = days;
         }
 
+        let generatedKeysList = [];
+
         async function generateKey() {
             const nameInput = document.getElementById('txt-client-name');
             const name = nameInput.value.trim() || "Operations Client";
             const daysInput = document.getElementById('txt-duration');
             const days = parseInt(daysInput.value) || 30;
+            const batchInput = document.getElementById('txt-batch-count');
+            const count = parseInt(batchInput.value) || 1;
             
-            let tool = document.getElementById('sel-tool').value;
-            if (tool === 'custom') {
-                tool = document.getElementById('txt-custom-tool').value.toLowerCase().trim().replace(/\\s+/g, '-');
-                if (!tool) {
-                    alert('Please enter a custom tool identifier.');
-                    return;
-                }
-            }
-            
-            const res = await fetchAPI('/api/generate_key', { name: name, days: days, tool: tool }, 'POST');
+            const res = await fetchAPI('/api/generate_key', { name: name, days: days, count: count }, 'POST');
             if (res.status === 'ok') {
+                generatedKeysList = res.keys || [res.key];
+                
+                const container = document.getElementById('new-keys-container');
+                container.innerHTML = '';
+                
+                generatedKeysList.forEach((k, idx) => {
+                    const keyDiv = document.createElement('div');
+                    keyDiv.style.display = 'flex';
+                    keyDiv.style.alignItems = 'center';
+                    keyDiv.style.justifyContent = 'space-between';
+                    keyDiv.style.background = 'rgba(0,0,0,0.4)';
+                    keyDiv.style.border = '1px solid rgba(255,255,255,0.05)';
+                    keyDiv.style.padding = '8px 12px';
+                    keyDiv.style.borderRadius = '8px';
+                    keyDiv.style.gap = '8px';
+                    
+                    keyDiv.innerHTML = `
+                        <code style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #ffffff; word-break: break-all; user-select: all; flex-grow: 1; text-align: left;">${k}</code>
+                        <button class="btn-copy" onclick="copyTextDirectly('${k}')" style="padding: 2px 6px; font-size: 10px; flex-shrink: 0;">Copy</button>
+                    `;
+                    container.appendChild(keyDiv);
+                });
+                
+                document.getElementById('reveal-title-text').innerText = `${generatedKeysList.length} License${generatedKeysList.length > 1 ? 's' : ''} Registered`;
                 document.getElementById('new-key-box').style.display = 'block';
-                document.getElementById('new-key-text').innerText = res.key;
                 nameInput.value = ''; // clear name input
-                showToast("New license key generated and saved!");
+                showToast(`${generatedKeysList.length} new key${generatedKeysList.length > 1 ? 's' : ''} generated!`);
                 loadClients();
             } else {
                 alert("Failed to generate key: " + res.error);
             }
+        }
+
+        function copyAllKeys() {
+            if (generatedKeysList.length === 0) return;
+            const keysStr = generatedKeysList.join('\n');
+            navigator.clipboard.writeText(keysStr).then(() => {
+                showToast("All keys copied to clipboard!");
+            }).catch(err => {
+                console.error("Copy failed", err);
+            });
+        }
+
+        function downloadKeysTxt() {
+            if (generatedKeysList.length === 0) return;
+            const keysStr = generatedKeysList.join('\n');
+            const blob = new Blob([keysStr], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `dreamcrest_licenses_${new Date().toISOString().slice(0,10)}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast("Keys text file downloaded!");
         }
 
         async function toggleStatus(key) {
@@ -1268,24 +1359,38 @@ def api_generate_key():
     if not name:
         name = "Unknown Client"
     days = data.get("days", 30)
-    tool = data.get("tool", "ig-master-suite").strip().lower()
+    count = int(data.get("count", 1))
+    if count < 1:
+        count = 1
     
-    key_str, expiry_str = generate_key_string(days, tool)
+    tool = "all" # Force universal key target for all new license keys
     
     db = load_db()
-    db["clients"].append({
-        "name": name,
-        "key": key_str,
-        "expiry": expiry_str,
-        "status": "active",
-        "last_ip": None,
-        "device_id": None,
-        "tool": tool,
-        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    })
+    generated_keys = []
+    
+    for i in range(count):
+        client_name = f"{name} #{i+1}" if count > 1 else name
+        key_str, expiry_str = generate_key_string(days, tool)
+        
+        db["clients"].append({
+            "name": client_name,
+            "key": key_str,
+            "expiry": expiry_str,
+            "status": "active",
+            "last_ip": None,
+            "device_id": None,
+            "tool": tool,
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        })
+        generated_keys.append(key_str)
+        
     save_db(db)
     
-    return jsonify({"status": "ok", "key": key_str})
+    return jsonify({
+        "status": "ok",
+        "key": generated_keys[0],
+        "keys": generated_keys
+    })
 
 @app.route('/api/toggle_status', methods=['POST'])
 def api_toggle_status():
@@ -1347,9 +1452,9 @@ def api_license_activate():
     if not found_client:
         return jsonify({"error": "License key not registered on admin console."}), 404
 
-    # Bind device or verify binding
+    # Bind device or verify binding (robust check to prevent false "already activated" triggers)
     current_device = found_client.get("device_id")
-    if current_device and current_device != device_id:
+    if current_device and current_device not in (None, "", "None", "null") and current_device != device_id:
         return jsonify({"error": "This license key is already activated on another machine."}), 400
 
     if found_client["status"] == "disabled":
@@ -1401,8 +1506,9 @@ def api_license_validate():
     if found_client["status"] == "disabled":
         return jsonify({"error": "License key suspended."}), 403
 
-    # Check device binding
-    if found_client.get("device_id") != device_id:
+    # Check device binding (robust check)
+    current_device = found_client.get("device_id")
+    if current_device and current_device not in (None, "", "None", "null") and current_device != device_id:
         return jsonify({"error": "Invalid hardware binding."}), 400
 
     # Check expiration date
