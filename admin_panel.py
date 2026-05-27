@@ -8,7 +8,7 @@ import base64
 import threading
 import webbrowser
 from datetime import datetime, timedelta
-from flask import Flask, jsonify, request, render_template_string
+from flask import Flask, jsonify, request, render_template_string, send_from_path
 
 app = Flask(__name__)
 
@@ -86,25 +86,52 @@ def save_db(data):
 
 # ── KEYGEN LOGIC ────────────────────────────────────────────────────────────
 
-def generate_key_string(days):
+def generate_key_string(days, tool="ig-master-suite"):
     expiry_date = datetime.now().date() + timedelta(days=days)
     expiry_str = expiry_date.strftime("%Y-%m-%d")
-    sig = hmac.new(LICENSE_SECRET, expiry_str.encode('utf-8'), hashlib.sha256).hexdigest()[:16]
-    payload = f"{expiry_str}|{sig}"
+    
+    # Include tool target in the signature calculation for cryptographic binding
+    sig_payload = f"{expiry_str}|{tool}"
+    sig = hmac.new(LICENSE_SECRET, sig_payload.encode('utf-8'), hashlib.sha256).hexdigest()[:16]
+    
+    payload = f"{expiry_str}|{tool}|{sig}"
     return base64.b64encode(payload.encode('utf-8')).decode('utf-8'), expiry_str
 
-def check_key_signature(key_str):
+def check_key_signature(key_str, tool="ig-master-suite"):
     try:
         decoded = base64.b64decode(key_str.strip().encode('utf-8')).decode('utf-8')
         if "|" not in decoded:
             return False, "Invalid format"
-        expiry_str, sig = decoded.split("|", 1)
-        expected_sig = hmac.new(LICENSE_SECRET, expiry_str.encode('utf-8'), hashlib.sha256).hexdigest()[:16]
-        if not hmac.compare_digest(sig, expected_sig):
-            return False, "Signature mismatch"
+        
+        parts = decoded.split("|")
+        if len(parts) == 3:
+            expiry_str, key_tool, sig = parts
+        elif len(parts) == 2:
+            # Fallback for legacy keys (no tool target, implicit default to 'ig-master-suite')
+            expiry_str, sig = parts
+            key_tool = "ig-master-suite"
+        else:
+            return False, "Invalid number of format components"
+        
+        # Calculate dynamic tool signature
+        sig_payload = f"{expiry_str}|{key_tool}"
+        expected_sig = hmac.new(LICENSE_SECRET, sig_payload.encode('utf-8'), hashlib.sha256).hexdigest()[:16]
+        
+        # Calculate legacy signature
+        legacy_expected_sig = hmac.new(LICENSE_SECRET, expiry_str.encode('utf-8'), hashlib.sha256).hexdigest()[:16]
+        
+        # Compare signature with either dynamic or legacy format
+        sig_matches = hmac.compare_digest(sig, expected_sig) or hmac.compare_digest(sig, legacy_expected_sig)
+        if not sig_matches:
+            return False, "Signature verification failed"
+            
+        # Verify tool target
+        if key_tool != "all" and key_tool != tool:
+            return False, f"Key target mismatch. Intended for '{key_tool}'"
+            
         return True, expiry_str
     except Exception:
-        return False, "Corrupt key"
+        return False, "Corrupt key structure"
 
 # ── PREMIUM REDESIGNED HTML TEMPLATE ───────────────────────────────────────────
 
@@ -114,7 +141,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>⚡ Admin Control Console | IG Metrics Pro</title>
+    <title>Dreamcrest Enterprise Control Center</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -464,6 +491,7 @@ HTML_TEMPLATE = """
         /* CLIENT LIST CONTROLS */
         .table-toolbar {
             display: flex;
+            flex-wrap: wrap;
             justify-content: space-between;
             align-items: center;
             gap: 15px;
@@ -668,6 +696,7 @@ HTML_TEMPLATE = """
         /* TABLE ACTION BUTTONS */
         .actions-group {
             display: flex;
+            flex-wrap: wrap;
             gap: 8px;
         }
 
@@ -773,10 +802,11 @@ HTML_TEMPLATE = """
     <div class="dashboard-wrapper">
         <header>
             <div class="header-brand">
-                <div class="brand-icon">⚡</div>
+                <img src="/logo.png" alt="Logo" style="width: 44px; height: 44px; border-radius: 10px; box-shadow: 0 0 15px rgba(99, 102, 241, 0.35);" onerror="this.style.display='none'; document.getElementById('fallback-icon').style.display='flex';" />
+                <div id="fallback-icon" class="brand-icon" style="display: none;">⚡</div>
                 <div class="brand-text">
-                    <h1>IG Metrics Pro</h1>
-                    <p>Enterprise Direct P2P Console</p>
+                    <h1>Dreamcrest Enterprise Control Center</h1>
+                    <p>Enterprise Universal Key Control Panel</p>
                 </div>
             </div>
             <div class="server-status-badge">
@@ -830,6 +860,21 @@ HTML_TEMPLATE = """
                 </div>
 
                 <div class="form-group">
+                    <label for="sel-tool">Target Application</label>
+                    <select id="sel-tool" class="input-control" onchange="toggleCustomToolInput()">
+                        <option value="ig-master-suite">IG Master Suite</option>
+                        <option value="whatsapp-bulk-sender">Dreamcrest WhatsApp Sender</option>
+                        <option value="all">All Access (Universal Key)</option>
+                        <option value="custom">Custom Tool...</option>
+                    </select>
+                </div>
+                
+                <div class="form-group" id="custom-tool-group" style="display: none;">
+                    <label for="txt-custom-tool">Custom Tool Identifier</label>
+                    <input type="text" id="txt-custom-tool" class="input-control" placeholder="e.g. facebook-extractor" autocomplete="off">
+                </div>
+
+                <div class="form-group">
                     <label for="txt-duration">License Duration (Days)</label>
                     <input type="number" id="txt-duration" class="input-control" value="30" min="1" max="36500" placeholder="Enter number of days...">
                     <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
@@ -861,9 +906,16 @@ HTML_TEMPLATE = """
                 <h2>💻 Active P2P Clients</h2>
 
                 <div class="table-toolbar">
-                    <div class="search-wrapper">
+                    <div class="search-wrapper" style="flex: 1.5; min-width: 200px;">
                         <span class="search-icon">🔍</span>
-                        <input type="text" id="txt-search" class="search-input" placeholder="Search by name, key, or IP..." onkeyup="filterClientsTable()">
+                        <input type="text" id="txt-search" class="search-input" placeholder="Search name, key, device, or IP..." onkeyup="filterClientsTable()">
+                    </div>
+                    <div style="flex: 1; min-width: 150px;">
+                        <select id="sel-filter-tool" class="input-control" style="padding: 10px 14px; background: rgba(0,0,0,0.35); font-size: 13.5px;" onchange="filterClientsTable()">
+                            <option value="all">All Applications</option>
+                            <option value="ig-master-suite">IG Master Suite</option>
+                            <option value="whatsapp-bulk-sender">Dreamcrest WhatsApp Sender</option>
+                        </select>
                     </div>
                     <div class="filter-group">
                         <button id="filter-all" class="filter-btn active" onclick="setFilter('all')">All</button>
@@ -876,10 +928,10 @@ HTML_TEMPLATE = """
                     <table>
                         <thead>
                             <tr>
-                                <th>Identifier</th>
+                                <th>Identifier (App Target)</th>
                                 <th>License Key</th>
                                 <th>Expiry Date</th>
-                                <th>Last Seen IP</th>
+                                <th>Device Link / Last Seen IP</th>
                                 <th>Access status</th>
                                 <th>Control Switch</th>
                             </tr>
@@ -917,6 +969,16 @@ HTML_TEMPLATE = """
                     alert.remove();
                 }, 300);
             }, 3200);
+        }
+
+        function toggleCustomToolInput() {
+            const toolSelect = document.getElementById('sel-tool');
+            const customToolGroup = document.getElementById('custom-tool-group');
+            if (toolSelect.value === 'custom') {
+                customToolGroup.style.display = 'block';
+            } else {
+                customToolGroup.style.display = 'none';
+            }
         }
 
         function copyToClipboard(elementId) {
@@ -961,7 +1023,16 @@ HTML_TEMPLATE = """
             const daysInput = document.getElementById('txt-duration');
             const days = parseInt(daysInput.value) || 30;
             
-            const res = await fetchAPI('/api/generate_key', { name: name, days: days }, 'POST');
+            let tool = document.getElementById('sel-tool').value;
+            if (tool === 'custom') {
+                tool = document.getElementById('txt-custom-tool').value.toLowerCase().trim().replace(/\\s+/g, '-');
+                if (!tool) {
+                    alert('Please enter a custom tool identifier.');
+                    return;
+                }
+            }
+            
+            const res = await fetchAPI('/api/generate_key', { name: name, days: days, tool: tool }, 'POST');
             if (res.status === 'ok') {
                 document.getElementById('new-key-box').style.display = 'block';
                 document.getElementById('new-key-text').innerText = res.key;
@@ -986,6 +1057,16 @@ HTML_TEMPLATE = """
                 const res = await fetchAPI('/api/delete_client', { key: key }, 'POST');
                 if (res.status === 'ok') {
                     showToast("License deleted and revoked.");
+                    loadClients();
+                }
+            }
+        }
+
+        async function resetDeviceLock(key) {
+            if (confirm("Reset hardware lock for this license key? The client will be allowed to activate on a new machine next time they open the application.")) {
+                const res = await fetchAPI('/api/reset_device', { key: key }, 'POST');
+                if (res.status === 'ok') {
+                    showToast("Device activation binding reset successfully.");
                     loadClients();
                 }
             }
@@ -1020,6 +1101,7 @@ HTML_TEMPLATE = """
         function renderTable() {
             const tbody = document.getElementById('clients-tbody');
             const searchQuery = document.getElementById('txt-search').value.toLowerCase().trim();
+            const selectedTool = document.getElementById('sel-filter-tool').value;
             
             // 1. Filter by status tabs
             let filtered = clientsList;
@@ -1029,13 +1111,19 @@ HTML_TEMPLATE = """
                 filtered = clientsList.filter(c => c.status === 'disabled');
             }
             
+            // 1b. Filter by target application dropdown
+            if (selectedTool !== 'all') {
+                filtered = filtered.filter(c => (c.tool || 'ig-master-suite') === selectedTool);
+            }
+            
             // 2. Filter by search input query
             if (searchQuery !== '') {
                 filtered = filtered.filter(c => {
                     const name = (c.name || '').toLowerCase();
                     const key = (c.key || '').toLowerCase();
                     const ip = (c.last_ip || '').toLowerCase();
-                    return name.includes(searchQuery) || key.includes(searchQuery) || ip.includes(searchQuery);
+                    const devId = (c.device_id || '').toLowerCase();
+                    return name.includes(searchQuery) || key.includes(searchQuery) || ip.includes(searchQuery) || devId.includes(searchQuery);
                 });
             }
 
@@ -1054,11 +1142,21 @@ HTML_TEMPLATE = """
                     ? `<span class="ip-cell">${c.last_ip}</span>` 
                     : `<span class="ip-none">Not checked in</span>`;
                 
+                const deviceDisplay = c.device_id
+                    ? `<code style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #a5b4fc;">${c.device_id.slice(0, 15)}...</code>`
+                    : `<span class="ip-none">No machine linked</span>`;
+                
                 const shortKey = c.key.substring(0, 14) + '...';
+                const toolName = c.tool || 'ig-master-suite';
+                
+                const resetDeviceBtn = c.device_id
+                    ? `<button class="btn-action-sm btn-sm-delete" style="background: rgba(99, 102, 241, 0.08); border-color: rgba(99, 102, 241, 0.15); color: #a5b4fc;" onclick="resetDeviceLock('${c.key}')" title="Reset device link to transfer key">🔓 Reset Link</button>`
+                    : '';
                 
                 html += `<tr>
                     <td>
                         <div class="client-name-cell">${c.name}</div>
+                        <div style="font-size: 11px; color: var(--primary); margin-top: 4px; font-weight: 500;">${toolName}</div>
                     </td>
                     <td>
                         <div class="client-key-code">
@@ -1067,7 +1165,10 @@ HTML_TEMPLATE = """
                         </div>
                     </td>
                     <td class="expiry-cell">${c.expiry}</td>
-                    <td>${ipDisplay}</td>
+                    <td>
+                        <div>${deviceDisplay}</div>
+                        <div style="margin-top: 4px;">${ipDisplay}</div>
+                    </td>
                     <td>
                         <span class="badge-status ${statusBadgeClass}">
                             <span class="status-dot-mini"></span>
@@ -1079,6 +1180,7 @@ HTML_TEMPLATE = """
                             <button class="btn-action-sm ${isActive ? 'btn-sm-toggle-off' : 'btn-sm-toggle-on'}" onclick="toggleStatus('${c.key}')">
                                 ${isActive ? '🛑 Suspend' : '✅ Activate'}
                             </button>
+                            ${resetDeviceBtn}
                             <button class="btn-action-sm btn-sm-delete" onclick="deleteClient('${c.key}')" title="Delete Permanent">
                                 🗑️ Delete
                             </button>
@@ -1093,6 +1195,32 @@ HTML_TEMPLATE = """
             const res = await fetchAPI('/api/clients');
             if (res.status === 'ok') {
                 clientsList = res.clients || [];
+                
+                // Dynamically populate the filter dropdown with unique tool names
+                const filterToolSelect = document.getElementById('sel-filter-tool');
+                const currentSelected = filterToolSelect.value;
+                
+                filterToolSelect.innerHTML = `
+                    <option value="all">All Applications</option>
+                    <option value="ig-master-suite">IG Master Suite</option>
+                    <option value="whatsapp-bulk-sender">Dreamcrest WhatsApp Sender</option>
+                `;
+                
+                const uniqueTools = [...new Set(clientsList.map(c => c.tool).filter(Boolean))];
+                uniqueTools.forEach(tool => {
+                    if (tool !== 'ig-master-suite' && tool !== 'whatsapp-bulk-sender') {
+                        const opt = document.createElement('option');
+                        opt.value = tool;
+                        opt.textContent = tool;
+                        filterToolSelect.appendChild(opt);
+                    }
+                });
+                
+                filterToolSelect.value = currentSelected;
+                if (!filterToolSelect.value) {
+                    filterToolSelect.value = 'all';
+                }
+
                 updateKPIs();
                 renderTable();
             }
@@ -1114,6 +1242,20 @@ HTML_TEMPLATE = """
 def home():
     return render_template_string(HTML_TEMPLATE)
 
+@app.route('/logo.png')
+def logo():
+    # Attempt to locate and serve the local logo.png
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    if os.path.exists(os.path.join(base_dir, "logo.png")):
+        return send_from_path(base_dir, "logo.png")
+        
+    if getattr(sys, 'frozen', False):
+        exe_dir = os.path.dirname(sys.executable)
+        if os.path.exists(os.path.join(exe_dir, "logo.png")):
+            return send_from_path(exe_dir, "logo.png")
+            
+    return jsonify({"error": "Logo file not found"}), 404
+
 @app.route('/api/clients')
 def api_clients():
     db = load_db()
@@ -1126,8 +1268,9 @@ def api_generate_key():
     if not name:
         name = "Unknown Client"
     days = data.get("days", 30)
+    tool = data.get("tool", "ig-master-suite").strip().lower()
     
-    key_str, expiry_str = generate_key_string(days)
+    key_str, expiry_str = generate_key_string(days, tool)
     
     db = load_db()
     db["clients"].append({
@@ -1136,6 +1279,8 @@ def api_generate_key():
         "expiry": expiry_str,
         "status": "active",
         "last_ip": None,
+        "device_id": None,
+        "tool": tool,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     })
     save_db(db)
@@ -1163,17 +1308,135 @@ def api_delete_client():
     save_db(db)
     return jsonify({"status": "ok"})
 
-# ── P2P CLIENT VERIFICATION ENDPOINT ──
+@app.route('/api/reset_device', methods=['POST'])
+def api_reset_device():
+    data = request.json or {}
+    key = data.get("key")
+    db = load_db()
+    for c in db["clients"]:
+        if c["key"] == key:
+            c["device_id"] = None
+            break
+    save_db(db)
+    return jsonify({"status": "ok"})
+
+# ── NODE.JS APP COMPATIBILITY ENDPOINTS ──
+
+@app.route('/api/license/activate', methods=['POST'])
+def api_license_activate():
+    data = request.json or {}
+    key = data.get("key", "").strip()
+    device_id = data.get("deviceId", "").strip()
+    tool = data.get("tool", "dreamcrest-whatsapp-sender").strip().lower()
+
+    if not key or not device_id:
+        return jsonify({"error": "Missing key or deviceId"}), 400
+
+    # Validate crypto signature of the license string
+    is_valid, expiry_str = check_key_signature(key, tool)
+    if not is_valid:
+        return jsonify({"error": "Invalid key cryptographic signature or tool mismatch."}), 400
+
+    db = load_db()
+    found_client = None
+    for c in db["clients"]:
+        if c["key"] == key:
+            found_client = c
+            break
+
+    if not found_client:
+        return jsonify({"error": "License key not registered on admin console."}), 404
+
+    # Bind device or verify binding
+    current_device = found_client.get("device_id")
+    if current_device and current_device != device_id:
+        return jsonify({"error": "This license key is already activated on another machine."}), 400
+
+    if found_client["status"] == "disabled":
+        return jsonify({"error": "This license has been suspended by the administrator."}), 403
+
+    # Check expiration date
+    try:
+        exp_date = datetime.strptime(found_client["expiry"], "%Y-%m-%d").date()
+        if datetime.now().date() > exp_date:
+            return jsonify({"error": "This license key has expired."}), 400
+    except Exception:
+        pass
+
+    # Save activation bindings
+    found_client["device_id"] = device_id
+    found_client["last_ip"] = request.remote_addr
+    found_client["tool"] = found_client.get("tool", tool)  # Backfill tool if missing
+    save_db(db)
+
+    # Format expiry as ISO 8601 string
+    try:
+        exp_dt = datetime.strptime(found_client["expiry"], "%Y-%m-%d")
+        iso_expiry = exp_dt.isoformat() + "Z"
+    except Exception:
+        iso_expiry = datetime.now().isoformat() + "Z"
+
+    return jsonify({"success": True, "expiresAt": iso_expiry})
+
+@app.route('/api/license/validate', methods=['POST'])
+def api_license_validate():
+    data = request.json or {}
+    key = data.get("key", "").strip()
+    device_id = data.get("deviceId", "").strip()
+    tool = data.get("tool", "dreamcrest-whatsapp-sender").strip().lower()
+
+    if not key or not device_id:
+        return jsonify({"error": "Missing key or deviceId"}), 400
+
+    db = load_db()
+    found_client = None
+    for c in db["clients"]:
+        if c["key"] == key:
+            found_client = c
+            break
+
+    if not found_client:
+        return jsonify({"error": "License key not found."}), 404
+
+    if found_client["status"] == "disabled":
+        return jsonify({"error": "License key suspended."}), 403
+
+    # Check device binding
+    if found_client.get("device_id") != device_id:
+        return jsonify({"error": "Invalid hardware binding."}), 400
+
+    # Check expiration date
+    try:
+        exp_date = datetime.strptime(found_client["expiry"], "%Y-%m-%d").date()
+        if datetime.now().date() > exp_date:
+            return jsonify({"error": "License key has expired."}), 400
+    except Exception:
+        pass
+
+    # Update IP tracker
+    found_client["last_ip"] = request.remote_addr
+    save_db(db)
+
+    try:
+        exp_dt = datetime.strptime(found_client["expiry"], "%Y-%m-%d")
+        iso_expiry = exp_dt.isoformat() + "Z"
+    except Exception:
+        iso_expiry = datetime.now().isoformat() + "Z"
+
+    return jsonify({"success": True, "expiresAt": iso_expiry})
+
+# ── LEGACY P2P CLIENT VERIFICATION ENDPOINT ──
 @app.route('/api/verify_client', methods=['POST'])
 def api_verify_client():
     data = request.json or {}
     client_key = data.get("license_key", "").strip()
+    tool = data.get("tool", "ig-master-suite").strip().lower()
     client_ip = request.remote_addr
 
     # Validate crypto signature of the license string
-    is_valid, _ = check_key_signature(client_key)
+    is_valid, _ = check_key_signature(client_key, tool)
     if not is_valid:
-        return jsonify({"status": "disabled", "error": "Invalid key cryptographic signature."}), 403
+        return jsonify({"status": "disabled", "error": "Invalid key cryptographic signature or tool mismatch."}), 403
 
     db = load_db()
     found_client = None
@@ -1183,6 +1446,7 @@ def api_verify_client():
             found_client = c
             # Dynamic connection tracking: update last seen IP
             c["last_ip"] = client_ip
+            c["tool"] = c.get("tool", tool)  # Backfill tool target if missing
             break
             
     if not found_client:
@@ -1215,7 +1479,7 @@ if __name__ == '__main__':
     threading.Thread(target=auto_open, daemon=True).start()
     
     print("=" * 70)
-    print("⚡ IG METRICS PRO - ENTERPRISE CONTROL CONSOLE ⚡")
+    print("=== DREAMCREST - UNIVERSAL CONTROL CONSOLE ===")
     print("=" * 70)
     print("P2P Verification Server successfully started.")
     print(f"Local Admin URL: http://127.0.0.1:{port}")
