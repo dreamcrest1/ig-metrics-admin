@@ -16,44 +16,131 @@ app = Flask(__name__)
 # Try to import psycopg2 for PostgreSQL support (used for persistent cloud hosting like Render)
 try:
     import psycopg2
+    import psycopg2.pool
     HAS_POSTGRES = True
 except ImportError:
     HAS_POSTGRES = False
 
+# Detect cloud environment (Render sets DATABASE_URL and PORT)
+IS_CLOUD = bool(os.environ.get("DATABASE_URL") or os.environ.get("RENDER"))
+
 if getattr(sys, 'frozen', False):
-    # If the app is run as a bundle (frozen), sys.executable points to the .exe location.
     DB_PATH = os.path.join(os.path.dirname(sys.executable), "admin_db.json")
 else:
-    # Running in raw script mode
     DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "admin_db.json")
 
 LICENSE_SECRET = b"IG_METRICS_PRO_SECRET_2026"
 
+# ── CONNECTION POOL (initialized lazily) ────────────────────────────────────
+_pg_pool = None
+
+def get_pg_pool():
+    global _pg_pool
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url or not HAS_POSTGRES:
+        return None
+    if _pg_pool is None:
+        try:
+            _pg_pool = psycopg2.pool.ThreadedConnectionPool(
+                minconn=1, maxconn=5, dsn=db_url,
+                connect_timeout=10
+            )
+        except Exception as e:
+            print(f"[POOL INIT ERROR] {e}")
+            return None
+    return _pg_pool
+
 # ── DATABASE HELPERS ────────────────────────────────────────────────────────
 
-def load_db():
-    db_url = os.environ.get("DATABASE_URL")
-    if db_url and HAS_POSTGRES:
-        try:
-            conn = psycopg2.connect(db_url)
-            cur = conn.cursor()
-            cur.execute("CREATE TABLE IF NOT EXISTS admin_store (id SERIAL PRIMARY KEY, data TEXT);")
+_pg_table_ready = False
+
+def _ensure_pg_table(cur):
+    """Migrate from old SERIAL-based table to single-row UPSERT pattern if needed."""
+    global _pg_table_ready
+    if _pg_table_ready:
+        return
+    
+    try:
+        # Check if old table exists with SERIAL primary key
+        cur.execute("""
+            SELECT column_default FROM information_schema.columns
+            WHERE table_name = 'admin_store' AND column_name = 'id';
+        """)
+        row = cur.fetchone()
+        
+        if row and row[0] and 'nextval' in str(row[0]):
+            # Old SERIAL table detected — migrate data
+            print("[MIGRATION] Migrating admin_store from SERIAL to single-row UPSERT schema...")
             cur.execute("SELECT data FROM admin_store ORDER BY id DESC LIMIT 1;")
+            old_data = cur.fetchone()
+            cur.execute("DROP TABLE admin_store;")
+            cur.execute("""
+                CREATE TABLE admin_store (
+                    id INTEGER PRIMARY KEY DEFAULT 1,
+                    data TEXT NOT NULL,
+                    updated_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
+            if old_data:
+                cur.execute("INSERT INTO admin_store (id, data) VALUES (1, %s);", (old_data[0],))
+            print("[MIGRATION] Migration complete.")
+        elif row is None:
+            # Table doesn't exist yet — create fresh
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS admin_store (
+                    id INTEGER PRIMARY KEY DEFAULT 1,
+                    data TEXT NOT NULL,
+                    updated_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
+        # else: table already has the new schema, nothing to do
+    except Exception as e:
+        # If schema check fails, just try to create the table
+        print(f"[TABLE SETUP] Creating table: {e}")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS admin_store (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                data TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+        """)
+    
+    _pg_table_ready = True
+
+def load_db():
+    pool = get_pg_pool()
+    if pool:
+        conn = None
+        try:
+            conn = pool.getconn()
+            cur = conn.cursor()
+            _ensure_pg_table(cur)
+            conn.commit()
+            cur.execute("SELECT data FROM admin_store WHERE id = 1;")
             row = cur.fetchone()
             cur.close()
-            conn.close()
             if row:
                 return json.loads(row[0])
             return {"clients": []}
         except Exception as e:
             print(f"[POSTGRES LOAD ERROR] Falling back to local JSON: {e}")
-            
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+        finally:
+            if conn and pool:
+                try:
+                    pool.putconn(conn)
+                except Exception:
+                    pass
+
     if not os.path.exists(DB_PATH):
         return {"clients": []}
     try:
         with open(DB_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
-            # Schema integrity check
             if "clients" not in data:
                 data = {"clients": []}
             return data
@@ -61,22 +148,36 @@ def load_db():
         return {"clients": []}
 
 def save_db(data):
-    db_url = os.environ.get("DATABASE_URL")
-    if db_url and HAS_POSTGRES:
+    pool = get_pg_pool()
+    if pool:
+        conn = None
         try:
-            conn = psycopg2.connect(db_url)
+            conn = pool.getconn()
             cur = conn.cursor()
-            cur.execute("CREATE TABLE IF NOT EXISTS admin_store (id SERIAL PRIMARY KEY, data TEXT);")
+            _ensure_pg_table(cur)
             data_str = json.dumps(data)
-            cur.execute("INSERT INTO admin_store (data) VALUES (%s);", (data_str,))
-            # Clean up old database states to prevent unlimited table growth
-            cur.execute("DELETE FROM admin_store WHERE id NOT IN (SELECT id FROM admin_store ORDER BY id DESC LIMIT 5);")
+            # UPSERT single row — no table bloat
+            cur.execute("""
+                INSERT INTO admin_store (id, data, updated_at)
+                VALUES (1, %s, NOW())
+                ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW();
+            """, (data_str,))
             conn.commit()
             cur.close()
-            conn.close()
             return
         except Exception as e:
             print(f"[POSTGRES SAVE ERROR] Falling back to local JSON: {e}")
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+        finally:
+            if conn and pool:
+                try:
+                    pool.putconn(conn)
+                except Exception:
+                    pass
 
     try:
         with open(DB_PATH, "w", encoding="utf-8") as f:
@@ -1319,8 +1420,8 @@ HTML_TEMPLATE = """
 
         window.onload = function() {
             loadClients();
-            // Poll for fresh client registrations or IP ping updates every 4 seconds
-            setInterval(loadClients, 4000);
+            // Poll for fresh client registrations or IP ping updates every 15 seconds (cloud-friendly)
+            setInterval(loadClients, 15000);
         };
     </script>
 </body>
@@ -1573,23 +1674,32 @@ def api_verify_client():
 
     return jsonify({"status": "active", "message": "Access authorized."})
 
+# ── HEALTH CHECK FOR RENDER ──────────────────────────────────────────────────
+@app.route('/health')
+def health_check():
+    return jsonify({"status": "ok", "timestamp": datetime.now().isoformat()})
+
 # ── SERVER BOOTSTRAP ─────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8777))
     
-    def auto_open():
-        time.sleep(1.5)
-        webbrowser.open(f"http://127.0.0.1:{port}")
-        
-    threading.Thread(target=auto_open, daemon=True).start()
+    # Only auto-open browser when running locally (not on Render/cloud)
+    if not IS_CLOUD:
+        def auto_open():
+            time.sleep(1.5)
+            webbrowser.open(f"http://127.0.0.1:{port}")
+        threading.Thread(target=auto_open, daemon=True).start()
     
     print("=" * 70)
     print("=== DREAMCREST - UNIVERSAL CONTROL CONSOLE ===")
     print("=" * 70)
     print("P2P Verification Server successfully started.")
-    print(f"Local Admin URL: http://127.0.0.1:{port}")
-    print("Status database  : " + DB_PATH)
+    if IS_CLOUD:
+        print(f"Cloud mode active. Listening on port {port}")
+    else:
+        print(f"Local Admin URL: http://127.0.0.1:{port}")
+    print("Status database  : " + ("PostgreSQL (cloud)" if IS_CLOUD else DB_PATH))
     print("Keep this server window open for client verifications.")
     print("=" * 70)
     
