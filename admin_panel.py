@@ -8,7 +8,7 @@ import base64
 import threading
 import webbrowser
 from datetime import datetime, timedelta
-from flask import Flask, jsonify, request, render_template_string, send_from_path
+from flask import Flask, jsonify, request, render_template_string, send_from_directory
 
 app = Flask(__name__)
 
@@ -1247,12 +1247,12 @@ def logo():
     # Attempt to locate and serve the local logo.png
     base_dir = os.path.dirname(os.path.abspath(__file__))
     if os.path.exists(os.path.join(base_dir, "logo.png")):
-        return send_from_path(base_dir, "logo.png")
+        return send_from_directory(base_dir, "logo.png")
         
     if getattr(sys, 'frozen', False):
         exe_dir = os.path.dirname(sys.executable)
         if os.path.exists(os.path.join(exe_dir, "logo.png")):
-            return send_from_path(exe_dir, "logo.png")
+            return send_from_directory(exe_dir, "logo.png")
             
     return jsonify({"error": "Logo file not found"}), 404
 
