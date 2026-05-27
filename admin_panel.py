@@ -191,11 +191,14 @@ def generate_key_string(days, tool="ig-master-suite"):
     expiry_date = datetime.now().date() + timedelta(days=days)
     expiry_str = expiry_date.strftime("%Y-%m-%d")
     
-    # Include tool target in the signature calculation for cryptographic binding
-    sig_payload = f"{expiry_str}|{tool}"
+    # Random nonce to ensure every key is unique (fixes duplicate key collision bug)
+    nonce = hashlib.sha256(os.urandom(32)).hexdigest()[:8]
+    
+    # Include tool target AND nonce in the signature for cryptographic binding
+    sig_payload = f"{expiry_str}|{tool}|{nonce}"
     sig = hmac.new(LICENSE_SECRET, sig_payload.encode('utf-8'), hashlib.sha256).hexdigest()[:16]
     
-    payload = f"{expiry_str}|{tool}|{sig}"
+    payload = f"{expiry_str}|{tool}|{nonce}|{sig}"
     return base64.b64encode(payload.encode('utf-8')).decode('utf-8'), expiry_str
 
 def check_key_signature(key_str, tool="ig-master-suite"):
@@ -205,28 +208,31 @@ def check_key_signature(key_str, tool="ig-master-suite"):
             return False, "Invalid format"
         
         parts = decoded.split("|")
-        if len(parts) == 3:
+        if len(parts) == 4:
+            # New format: expiry|tool|nonce|sig
+            expiry_str, key_tool, nonce, sig = parts
+            sig_payload = f"{expiry_str}|{key_tool}|{nonce}"
+            expected_sig = hmac.new(LICENSE_SECRET, sig_payload.encode('utf-8'), hashlib.sha256).hexdigest()[:16]
+            if not hmac.compare_digest(sig, expected_sig):
+                return False, "Signature verification failed"
+        elif len(parts) == 3:
+            # Legacy format: expiry|tool|sig (no nonce, deterministic)
             expiry_str, key_tool, sig = parts
+            sig_payload = f"{expiry_str}|{key_tool}"
+            expected_sig = hmac.new(LICENSE_SECRET, sig_payload.encode('utf-8'), hashlib.sha256).hexdigest()[:16]
+            if not hmac.compare_digest(sig, expected_sig):
+                return False, "Signature verification failed"
         elif len(parts) == 2:
-            # Fallback for legacy keys (no tool target, implicit default to 'ig-master-suite')
+            # Very old legacy format: expiry|sig (no tool, no nonce)
             expiry_str, sig = parts
             key_tool = "ig-master-suite"
+            legacy_expected_sig = hmac.new(LICENSE_SECRET, expiry_str.encode('utf-8'), hashlib.sha256).hexdigest()[:16]
+            if not hmac.compare_digest(sig, legacy_expected_sig):
+                return False, "Signature verification failed"
         else:
-            return False, "Invalid number of format components"
-        
-        # Calculate dynamic tool signature
-        sig_payload = f"{expiry_str}|{key_tool}"
-        expected_sig = hmac.new(LICENSE_SECRET, sig_payload.encode('utf-8'), hashlib.sha256).hexdigest()[:16]
-        
-        # Calculate legacy signature
-        legacy_expected_sig = hmac.new(LICENSE_SECRET, expiry_str.encode('utf-8'), hashlib.sha256).hexdigest()[:16]
-        
-        # Compare signature with either dynamic or legacy format
-        sig_matches = hmac.compare_digest(sig, expected_sig) or hmac.compare_digest(sig, legacy_expected_sig)
-        if not sig_matches:
-            return False, "Signature verification failed"
+            return False, "Invalid key format"
             
-        # Verify tool target
+        # Verify tool target (universal keys work for everything)
         if key_tool != "all" and key_tool != tool:
             return False, f"Key target mismatch. Intended for '{key_tool}'"
             
@@ -1120,15 +1126,6 @@ HTML_TEMPLATE = """
             }, 3200);
         }
 
-        function toggleCustomToolInput() {
-            const toolSelect = document.getElementById('sel-tool');
-            const customToolGroup = document.getElementById('custom-tool-group');
-            if (toolSelect.value === 'custom') {
-                customToolGroup.style.display = 'block';
-            } else {
-                customToolGroup.style.display = 'none';
-            }
-        }
 
         function copyToClipboard(elementId) {
             const copyText = document.getElementById(elementId).innerText;
@@ -1169,6 +1166,7 @@ HTML_TEMPLATE = """
         let generatedKeysList = [];
 
         async function generateKey() {
+            const btn = document.querySelector('.btn-action');
             const nameInput = document.getElementById('txt-client-name');
             const name = nameInput.value.trim() || "Operations Client";
             const daysInput = document.getElementById('txt-duration');
@@ -1176,38 +1174,53 @@ HTML_TEMPLATE = """
             const batchInput = document.getElementById('txt-batch-count');
             const count = parseInt(batchInput.value) || 1;
             
-            const res = await fetchAPI('/api/generate_key', { name: name, days: days, count: count }, 'POST');
-            if (res.status === 'ok') {
-                generatedKeysList = res.keys || [res.key];
-                
-                const container = document.getElementById('new-keys-container');
-                container.innerHTML = '';
-                
-                generatedKeysList.forEach((k, idx) => {
-                    const keyDiv = document.createElement('div');
-                    keyDiv.style.display = 'flex';
-                    keyDiv.style.alignItems = 'center';
-                    keyDiv.style.justifyContent = 'space-between';
-                    keyDiv.style.background = 'rgba(0,0,0,0.4)';
-                    keyDiv.style.border = '1px solid rgba(255,255,255,0.05)';
-                    keyDiv.style.padding = '8px 12px';
-                    keyDiv.style.borderRadius = '8px';
-                    keyDiv.style.gap = '8px';
+            // Show loading state
+            btn.disabled = true;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span>⏳ Generating...</span>';
+            
+            try {
+                const res = await fetchAPI('/api/generate_key', { name: name, days: days, count: count }, 'POST');
+                if (res.status === 'ok') {
+                    generatedKeysList = res.keys || [res.key];
                     
-                    keyDiv.innerHTML = `
-                        <code style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #ffffff; word-break: break-all; user-select: all; flex-grow: 1; text-align: left;">${k}</code>
-                        <button class="btn-copy" onclick="copyTextDirectly('${k}')" style="padding: 2px 6px; font-size: 10px; flex-shrink: 0;">Copy</button>
-                    `;
-                    container.appendChild(keyDiv);
-                });
-                
-                document.getElementById('reveal-title-text').innerText = `${generatedKeysList.length} License${generatedKeysList.length > 1 ? 's' : ''} Registered`;
-                document.getElementById('new-key-box').style.display = 'block';
-                nameInput.value = ''; // clear name input
-                showToast(`${generatedKeysList.length} new key${generatedKeysList.length > 1 ? 's' : ''} generated!`);
-                loadClients();
-            } else {
-                alert("Failed to generate key: " + res.error);
+                    const container = document.getElementById('new-keys-container');
+                    container.innerHTML = '';
+                    
+                    generatedKeysList.forEach((k, idx) => {
+                        const keyDiv = document.createElement('div');
+                        keyDiv.style.cssText = 'display:flex;align-items:center;justify-content:space-between;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.05);padding:8px 12px;border-radius:8px;gap:8px;';
+                        
+                        const codeEl = document.createElement('code');
+                        codeEl.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:12px;color:#ffffff;word-break:break-all;user-select:all;flex-grow:1;text-align:left;";
+                        codeEl.textContent = k;
+                        
+                        const copyBtn = document.createElement('button');
+                        copyBtn.className = 'btn-copy';
+                        copyBtn.style.cssText = 'padding:2px 6px;font-size:10px;flex-shrink:0;';
+                        copyBtn.textContent = 'Copy';
+                        copyBtn.onclick = () => copyTextDirectly(k);
+                        
+                        keyDiv.appendChild(codeEl);
+                        keyDiv.appendChild(copyBtn);
+                        container.appendChild(keyDiv);
+                    });
+                    
+                    document.getElementById('reveal-title-text').innerText = `${generatedKeysList.length} License${generatedKeysList.length > 1 ? 's' : ''} Registered`;
+                    document.getElementById('new-key-box').style.display = 'block';
+                    nameInput.value = '';
+                    showToast(`${generatedKeysList.length} new key${generatedKeysList.length > 1 ? 's' : ''} generated!`);
+                    loadClients();
+                } else {
+                    showToast("⚠️ " + (res.error || "Unknown server error"));
+                    alert("Failed to generate key: " + (res.error || JSON.stringify(res)));
+                }
+            } catch (e) {
+                showToast("⚠️ Network error: " + e.toString());
+                alert("Network error generating key: " + e.toString());
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
             }
         }
 
