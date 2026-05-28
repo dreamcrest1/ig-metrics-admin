@@ -1445,7 +1445,7 @@ HTML_TEMPLATE = """
 
 @app.route('/')
 def home():
-    return render_template_string(HTML_TEMPLATE)
+    return HTML_TEMPLATE
 
 @app.route('/logo.png')
 def logo():
