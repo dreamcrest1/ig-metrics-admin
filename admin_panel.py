@@ -1226,7 +1226,7 @@ HTML_TEMPLATE = """
 
         function copyAllKeys() {
             if (generatedKeysList.length === 0) return;
-            const keysStr = generatedKeysList.join('\n');
+            const keysStr = generatedKeysList.join('\\n');
             navigator.clipboard.writeText(keysStr).then(() => {
                 showToast("All keys copied to clipboard!");
             }).catch(err => {
@@ -1236,7 +1236,7 @@ HTML_TEMPLATE = """
 
         function downloadKeysTxt() {
             if (generatedKeysList.length === 0) return;
-            const keysStr = generatedKeysList.join('\n');
+            const keysStr = generatedKeysList.join('\\n');
             const blob = new Blob([keysStr], { type: 'text/plain' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
